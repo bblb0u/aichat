@@ -31,9 +31,12 @@
       <section class="chat-panel">
         <header class="topbar">
           <button class="icon-button menu-button" id="openSidebarButton" type="button" aria-label="打开侧边栏">☰</button>
-          <div class="model-selectors">
-            <select id="providerSelect" aria-label="选择 API"></select>
-            <select id="modelSelect" aria-label="选择模型"></select>
+          <div class="model-menu">
+            <button class="model-button" id="modelButton" type="button" aria-haspopup="listbox" aria-expanded="false">
+              <span id="modelButtonLabel">选择模型</span>
+              <span class="chevron">⌄</span>
+            </button>
+            <div class="model-popover" id="modelPopover" role="listbox"></div>
           </div>
           <button class="text-button" id="logoutButton" type="button">退出</button>
         </header>
@@ -70,4 +73,3 @@
     <script src="./app.js"></script>
   </body>
 </html>
-

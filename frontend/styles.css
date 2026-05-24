@@ -167,26 +167,98 @@ button {
   border-bottom: 1px solid var(--border);
 }
 
-.model-selectors {
+.model-menu {
+  position: relative;
   min-width: 0;
-  display: flex;
-  gap: 10px;
 }
 
-select {
-  max-width: 220px;
+.model-button {
+  max-width: min(58vw, 360px);
   height: 38px;
-  padding: 0 32px 0 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px 0 12px;
   color: var(--text);
-  background: var(--surface);
+  background: transparent;
   border: 1px solid transparent;
   border-radius: 8px;
+  font-weight: 600;
 }
 
-select:hover,
-select:focus {
+.model-button:hover,
+.model-button:focus {
+  background: var(--surface-muted);
   border-color: var(--border);
   outline: none;
+}
+
+.model-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+#modelButtonLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chevron {
+  color: var(--muted);
+}
+
+.model-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 12;
+  width: min(360px, calc(100vw - 24px));
+  max-height: min(420px, calc(100vh - 100px));
+  display: none;
+  padding: 6px;
+  overflow: auto;
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.14);
+}
+
+.model-popover.open {
+  display: block;
+}
+
+.model-option {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  padding: 10px;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  text-align: left;
+}
+
+.model-option:hover,
+.model-option.active {
+  background: var(--surface-muted);
+}
+
+.model-option span {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  font-weight: 650;
+}
+
+.model-option small {
+  max-width: 100%;
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
 }
 
 .text-button,
@@ -447,18 +519,15 @@ textarea {
     padding: 0 10px;
   }
 
-  .model-selectors {
+  .model-menu {
     flex: 1;
   }
 
-  select {
-    min-width: 0;
-    max-width: none;
-    flex: 1;
+  .model-button {
+    max-width: 100%;
   }
 
   .message {
     gap: 12px;
   }
 }
-

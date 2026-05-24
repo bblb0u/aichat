@@ -1,14 +1,20 @@
-const storageKey = "chat-api-ui-state";
+const authStorageKey = "chat-api-auth-state";
+const legacyStorageKey = "chat-api-ui-state";
+const preferencePrefix = "chat-api-preferences";
 
 const state = {
   backendUrl: "",
   accessKey: "",
+  authToken: "",
+  tokenExpiresAt: "",
+  userId: "",
   providers: [],
-  activeProvider: "",
+  models: [],
   activeModel: "",
   sessions: [],
   activeSessionId: "",
   isSending: false,
+  modelMenuOpen: false,
 };
 
 const elements = {
@@ -17,8 +23,9 @@ const elements = {
   backendUrlInput: document.querySelector("#backendUrlInput"),
   accessKeyInput: document.querySelector("#accessKeyInput"),
   loginError: document.querySelector("#loginError"),
-  providerSelect: document.querySelector("#providerSelect"),
-  modelSelect: document.querySelector("#modelSelect"),
+  modelButton: document.querySelector("#modelButton"),
+  modelButtonLabel: document.querySelector("#modelButtonLabel"),
+  modelPopover: document.querySelector("#modelPopover"),
   composer: document.querySelector("#composer"),
   promptInput: document.querySelector("#promptInput"),
   sendButton: document.querySelector("#sendButton"),
@@ -33,33 +40,149 @@ const elements = {
   sidebar: document.querySelector(".sidebar"),
 };
 
-function loadSavedState() {
-  const raw = localStorage.getItem(storageKey);
+function loadAuthState() {
+  const raw = localStorage.getItem(authStorageKey);
   if (!raw) return;
 
   try {
     const saved = JSON.parse(raw);
     state.backendUrl = saved.backendUrl || "";
-    state.activeProvider = saved.activeProvider || "";
-    state.activeModel = saved.activeModel || "";
-    state.sessions = Array.isArray(saved.sessions) ? saved.sessions : [];
-    state.activeSessionId = saved.activeSessionId || "";
+    state.authToken = saved.authToken || "";
+    state.tokenExpiresAt = saved.tokenExpiresAt || "";
+    state.userId = saved.userId || "";
   } catch {
-    localStorage.removeItem(storageKey);
+    localStorage.removeItem(authStorageKey);
   }
 }
 
-function saveState() {
+function saveAuthState() {
   localStorage.setItem(
-    storageKey,
+    authStorageKey,
     JSON.stringify({
       backendUrl: state.backendUrl,
-      activeProvider: state.activeProvider,
+      authToken: state.authToken,
+      tokenExpiresAt: state.tokenExpiresAt,
+      userId: state.userId,
+    }),
+  );
+}
+
+function clearAuthState() {
+  localStorage.removeItem(authStorageKey);
+}
+
+function userStorageKey() {
+  if (!state.backendUrl || !state.userId) return "";
+  return `${preferencePrefix}:${state.backendUrl}:${state.userId}`;
+}
+
+function loadPreferences() {
+  const key = userStorageKey();
+  if (!key) return;
+
+  const raw = localStorage.getItem(key);
+  if (!raw) {
+    return;
+  }
+
+  try {
+    const saved = JSON.parse(raw);
+    state.activeModel = saved.activeModel || "";
+    state.activeSessionId = saved.activeSessionId || "";
+  } catch {
+    localStorage.removeItem(key);
+  }
+}
+
+function migrateLegacyState() {
+  const raw = localStorage.getItem(legacyStorageKey);
+  const key = userStorageKey();
+  if (!raw || !key) return;
+
+  try {
+    const saved = JSON.parse(raw);
+    localStorage.setItem(
+      key,
+      JSON.stringify({
+        activeModel: saved.activeModel || "",
+        activeSessionId: saved.activeSessionId || "",
+      }),
+    );
+    localStorage.removeItem(legacyStorageKey);
+    loadPreferences();
+  } catch {
+    localStorage.removeItem(legacyStorageKey);
+  }
+}
+
+function savePreferences() {
+  const key = userStorageKey();
+  if (!key) return;
+
+  localStorage.setItem(
+    key,
+    JSON.stringify({
       activeModel: state.activeModel,
-      sessions: state.sessions,
       activeSessionId: state.activeSessionId,
     }),
   );
+}
+
+function resetUserState() {
+  state.providers = [];
+  state.models = [];
+  state.activeModel = "";
+  state.sessions = [];
+  state.activeSessionId = "";
+}
+
+async function fetchSessions() {
+  const response = await fetch(`${state.backendUrl}/api/sessions`, {
+    headers: authHeaders(),
+  });
+  if (!response.ok) {
+    throw new Error(await readableError(response));
+  }
+  const data = await response.json();
+  state.sessions = (data.sessions || []).map((session) => ({ ...session, messages: [] }));
+  if (!state.sessions.some((session) => session.id === state.activeSessionId)) {
+    state.activeSessionId = state.sessions[0]?.id || "";
+  }
+}
+
+async function fetchSessionMessages(sessionId) {
+  if (!sessionId) return;
+  const response = await fetch(`${state.backendUrl}/api/sessions/${encodeURIComponent(sessionId)}`, {
+    headers: authHeaders(),
+  });
+  if (!response.ok) {
+    throw new Error(await readableError(response));
+  }
+  const data = await response.json();
+  const session = state.sessions.find((item) => item.id === sessionId);
+  if (!session) return;
+  session.title = data.session.title;
+  session.createdAt = data.session.createdAt;
+  session.updatedAt = data.session.updatedAt;
+  session.messages = data.messages || [];
+}
+
+async function createRemoteSession() {
+  const id = createId();
+  const response = await fetch(`${state.backendUrl}/api/sessions`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ id, title: "新对话" }),
+  });
+  if (!response.ok) {
+    throw new Error(await readableError(response));
+  }
+  const data = await response.json();
+  const session = { ...data.session, messages: [] };
+  state.sessions.unshift(session);
+  state.activeSessionId = session.id;
+  savePreferences();
+  render();
 }
 
 function normalizeBackendUrl(url) {
@@ -69,8 +192,50 @@ function normalizeBackendUrl(url) {
 function authHeaders(extra = {}) {
   return {
     ...extra,
-    Authorization: `Bearer ${state.accessKey}`,
+    Authorization: `Bearer ${state.authToken}`,
   };
+}
+
+async function loginWithAccessKey(accessKey) {
+  const response = await fetch(`${state.backendUrl}/api/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ access_key: accessKey }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await readableError(response));
+  }
+
+  const data = await response.json();
+  state.authToken = data.token || "";
+  state.tokenExpiresAt = data.expires_at || "";
+  state.userId = data.user_id || "";
+  if (!state.authToken || !state.userId) {
+    throw new Error("后端没有返回有效 JWT");
+  }
+  saveAuthState();
+}
+
+async function validateSavedLogin() {
+  if (!state.backendUrl || !state.authToken || !state.userId) return false;
+  if (state.tokenExpiresAt && Date.parse(state.tokenExpiresAt) <= Date.now()) {
+    clearAuthState();
+    return false;
+  }
+
+  const response = await fetch(`${state.backendUrl}/api/auth/me`, {
+    headers: authHeaders(),
+  });
+  if (!response.ok) {
+    clearAuthState();
+    return false;
+  }
+
+  const data = await response.json();
+  state.userId = data.user_id || state.userId;
+  saveAuthState();
+  return true;
 }
 
 async function fetchProviders() {
@@ -82,17 +247,25 @@ async function fetchProviders() {
   }
   const data = await response.json();
   state.providers = data.providers || [];
-  if (!state.providers.length) {
-    throw new Error("后端没有配置可用 API");
+  state.models = Array.isArray(data.models) ? data.models : modelsFromProviders(state.providers);
+  if (!state.models.length) {
+    throw new Error("后端没有配置可用模型");
   }
 
-  if (!state.providers.some((provider) => provider.id === state.activeProvider)) {
-    state.activeProvider = state.providers[0].id;
+  if (!state.models.includes(state.activeModel)) {
+    const defaultModel = state.providers.find((provider) => provider.default_model)?.default_model;
+    state.activeModel = defaultModel && state.models.includes(defaultModel) ? defaultModel : state.models[0];
   }
-  const provider = currentProvider();
-  if (!provider.models.includes(state.activeModel)) {
-    state.activeModel = provider.default_model || provider.models[0];
+}
+
+function modelsFromProviders(providers) {
+  const models = [];
+  for (const provider of providers) {
+    for (const model of provider.models || []) {
+      if (!models.includes(model)) models.push(model);
+    }
   }
+  return models;
 }
 
 async function readableError(response) {
@@ -102,10 +275,6 @@ async function readableError(response) {
   } catch {
     return response.statusText || "请求失败";
   }
-}
-
-function currentProvider() {
-  return state.providers.find((provider) => provider.id === state.activeProvider) || state.providers[0];
 }
 
 function createId() {
@@ -119,53 +288,42 @@ function activeSession() {
   return state.sessions.find((session) => session.id === state.activeSessionId);
 }
 
-function createSession() {
-  const session = {
-    id: createId(),
-    title: "新对话",
-    messages: [],
-    createdAt: Date.now(),
-  };
-  state.sessions.unshift(session);
-  state.activeSessionId = session.id;
-  saveState();
-  render();
-}
-
-function ensureSession() {
+async function ensureSession() {
   if (!state.sessions.length || !activeSession()) {
-    createSession();
+    await createRemoteSession();
   }
 }
 
-function renderProviderOptions() {
-  elements.providerSelect.innerHTML = "";
-  elements.modelSelect.innerHTML = "";
-  if (!state.providers.length) {
-    return;
-  }
+function renderModelMenu() {
+  elements.modelButtonLabel.textContent = state.activeModel || "选择模型";
+  elements.modelButton.disabled = !state.models.length;
+  elements.modelButton.setAttribute("aria-expanded", String(state.modelMenuOpen));
+  elements.modelPopover.classList.toggle("open", state.modelMenuOpen);
+  elements.modelPopover.innerHTML = "";
 
-  for (const provider of state.providers) {
-    const option = document.createElement("option");
-    option.value = provider.id;
-    option.textContent = provider.name;
-    option.selected = provider.id === state.activeProvider;
-    elements.providerSelect.append(option);
-  }
+  for (const model of state.models) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `model-option${model === state.activeModel ? " active" : ""}`;
+    button.dataset.model = model;
+    button.setAttribute("role", "option");
+    button.setAttribute("aria-selected", String(model === state.activeModel));
 
-  renderModelOptions();
+    const name = document.createElement("span");
+    name.textContent = model;
+
+    const detail = document.createElement("small");
+    detail.textContent = providerNamesForModel(model).join(" / ");
+
+    button.append(name, detail);
+    elements.modelPopover.append(button);
+  }
 }
 
-function renderModelOptions() {
-  const provider = currentProvider();
-  elements.modelSelect.innerHTML = "";
-  for (const model of provider.models) {
-    const option = document.createElement("option");
-    option.value = model;
-    option.textContent = model;
-    option.selected = model === state.activeModel;
-    elements.modelSelect.append(option);
-  }
+function providerNamesForModel(model) {
+  return state.providers
+    .filter((provider) => (provider.models || []).includes(model))
+    .map((provider) => provider.name || provider.id);
 }
 
 function renderSessions() {
@@ -224,18 +382,19 @@ function createMessageNode(message) {
 
 function renderConnection() {
   try {
-    elements.connectionLabel.textContent = state.backendUrl ? new URL(state.backendUrl).host : "未连接";
+    const host = state.backendUrl ? new URL(state.backendUrl).host : "未连接";
+    elements.connectionLabel.textContent = state.userId ? `${host} · ${state.userId}` : host;
   } catch {
     elements.connectionLabel.textContent = "未连接";
   }
 }
 
 function render() {
-  renderProviderOptions();
+  renderModelMenu();
   renderSessions();
   renderMessages();
   renderConnection();
-  elements.sendButton.disabled = state.isSending;
+  elements.sendButton.disabled = state.isSending || !state.authToken;
 }
 
 function resizeTextarea() {
@@ -250,11 +409,18 @@ async function handleLogin(event) {
   state.accessKey = elements.accessKeyInput.value.trim();
 
   try {
+    await loginWithAccessKey(state.accessKey);
+    resetUserState();
+    migrateLegacyState();
+    loadPreferences();
     await fetchProviders();
+    await fetchSessions();
     elements.loginOverlay.classList.add("hidden");
     elements.accessKeyInput.value = "";
-    ensureSession();
-    saveState();
+    state.accessKey = "";
+    await ensureSession();
+    await fetchSessionMessages(state.activeSessionId);
+    savePreferences();
     render();
   } catch (error) {
     elements.loginError.textContent = error.message || "连接失败";
@@ -264,14 +430,16 @@ async function handleLogin(event) {
 function logout() {
   state.backendUrl = "";
   state.accessKey = "";
-  state.providers = [];
-  state.activeProvider = "";
-  state.activeModel = "";
-  saveState();
+  state.authToken = "";
+  state.tokenExpiresAt = "";
+  state.userId = "";
+  resetUserState();
+  clearAuthState();
   elements.backendUrlInput.value = "http://localhost:8000";
   elements.accessKeyInput.value = "";
   elements.loginOverlay.classList.remove("hidden");
   elements.connectionLabel.textContent = "未连接";
+  render();
 }
 
 async function sendMessage(event) {
@@ -279,29 +447,34 @@ async function sendMessage(event) {
   const text = elements.promptInput.value.trim();
   if (!text || state.isSending) return;
 
-  ensureSession();
+  await ensureSession();
   const session = activeSession();
   if (session.title === "新对话") {
     session.title = text.slice(0, 28);
   }
 
   session.messages.push({ role: "user", content: text });
+  session.updatedAt = Date.now();
   const assistantMessage = { role: "assistant", content: "", pending: true };
   session.messages.push(assistantMessage);
   elements.promptInput.value = "";
   resizeTextarea();
   state.isSending = true;
-  saveState();
+  savePreferences();
   render();
 
   try {
     await streamAssistantReply(session, assistantMessage);
+    await fetchSessions();
+    state.activeSessionId = session.id;
+    await fetchSessionMessages(session.id);
   } catch (error) {
     assistantMessage.content = error.message || "请求失败";
   } finally {
     assistantMessage.pending = false;
+    session.updatedAt = Date.now();
     state.isSending = false;
-    saveState();
+    savePreferences();
     render();
   }
 }
@@ -315,7 +488,7 @@ async function streamAssistantReply(session, assistantMessage) {
     method: "POST",
     headers: authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({
-      provider: state.activeProvider,
+      session_id: session.id,
       model: state.activeModel,
       messages: requestMessages,
     }),
@@ -400,31 +573,48 @@ elements.promptInput.addEventListener("keydown", (event) => {
   }
 });
 
-elements.providerSelect.addEventListener("change", () => {
-  state.activeProvider = elements.providerSelect.value;
-  const provider = currentProvider();
-  state.activeModel = provider.default_model || provider.models[0];
-  saveState();
-  render();
+elements.modelButton.addEventListener("click", () => {
+  state.modelMenuOpen = !state.modelMenuOpen;
+  renderModelMenu();
 });
 
-elements.modelSelect.addEventListener("change", () => {
-  state.activeModel = elements.modelSelect.value;
-  saveState();
+elements.modelPopover.addEventListener("click", (event) => {
+  const button = event.target.closest(".model-option");
+  if (!button) return;
+  state.activeModel = button.dataset.model;
+  state.modelMenuOpen = false;
+  savePreferences();
+  renderModelMenu();
 });
 
-elements.sessionList.addEventListener("click", (event) => {
+document.addEventListener("click", (event) => {
+  if (event.target.closest(".model-menu")) return;
+  if (!state.modelMenuOpen) return;
+  state.modelMenuOpen = false;
+  renderModelMenu();
+});
+
+elements.sessionList.addEventListener("click", async (event) => {
   const button = event.target.closest(".session-item");
   if (!button) return;
   state.activeSessionId = button.dataset.sessionId;
   elements.sidebar.classList.remove("open");
-  saveState();
+  savePreferences();
+  try {
+    await fetchSessionMessages(state.activeSessionId);
+  } catch (error) {
+    console.error(error);
+  }
   render();
 });
 
-elements.newChatButton.addEventListener("click", () => {
-  createSession();
-  elements.sidebar.classList.remove("open");
+elements.newChatButton.addEventListener("click", async () => {
+  try {
+    await createRemoteSession();
+    elements.sidebar.classList.remove("open");
+  } catch (error) {
+    console.error(error);
+  }
 });
 
 elements.logoutButton.addEventListener("click", logout);
@@ -435,10 +625,38 @@ elements.openSidebarButton.addEventListener("click", () => elements.sidebar.clas
 elements.closeSidebarButton.addEventListener("click", () => elements.sidebar.classList.remove("open"));
 
 async function init() {
-  loadSavedState();
+  loadAuthState();
   elements.backendUrlInput.value = state.backendUrl || "http://localhost:8000";
   elements.accessKeyInput.value = "";
   renderConnection();
+
+  if (!state.backendUrl || !state.authToken) {
+    render();
+    return;
+  }
+
+  try {
+    const isValid = await validateSavedLogin();
+    if (!isValid) {
+      elements.loginOverlay.classList.remove("hidden");
+      render();
+      return;
+    }
+    migrateLegacyState();
+    loadPreferences();
+    await fetchProviders();
+    await fetchSessions();
+    elements.loginOverlay.classList.add("hidden");
+    await ensureSession();
+    await fetchSessionMessages(state.activeSessionId);
+    savePreferences();
+    render();
+  } catch {
+    clearAuthState();
+    resetUserState();
+    elements.loginOverlay.classList.remove("hidden");
+    render();
+  }
 }
 
 init();

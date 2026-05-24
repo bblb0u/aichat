@@ -10,6 +10,9 @@ from pydantic import BaseModel, Field, HttpUrl, ValidationError, field_validator
 class ServerConfig(BaseModel):
     access_keys: list[str] = Field(default_factory=list)
     cors_origins: list[str] = Field(default_factory=lambda: ["*"])
+    jwt_secret: str | None = None
+    jwt_expires_minutes: int = Field(default=60 * 24 * 30, gt=0)
+    data_path: str = "data/chat.db"
 
     @field_validator("access_keys")
     @classmethod
@@ -77,6 +80,18 @@ def _apply_env_overrides(raw: dict[str, Any]) -> dict[str, Any]:
         raw.setdefault("server", {})["cors_origins"] = [
             item.strip() for item in cors_origins.split(",") if item.strip()
         ]
+
+    jwt_secret = os.getenv("JWT_SECRET")
+    if jwt_secret:
+        raw.setdefault("server", {})["jwt_secret"] = jwt_secret.strip()
+
+    jwt_expires_minutes = os.getenv("JWT_EXPIRES_MINUTES")
+    if jwt_expires_minutes:
+        raw.setdefault("server", {})["jwt_expires_minutes"] = int(jwt_expires_minutes)
+
+    data_path = os.getenv("DATA_PATH")
+    if data_path:
+        raw.setdefault("server", {})["data_path"] = data_path.strip()
 
     return raw
 

@@ -1,7 +1,13 @@
 server:
-  # Frontend login keys. These protect your backend proxy endpoint.
+  # Frontend login keys. Each key maps to a separate user identity.
   access_keys:
-    - "change-me-login-key"
+    - "user-one-login-key"
+    - "user-two-login-key"
+
+  # Set a stable secret in production. JWT_SECRET env var overrides this value.
+  jwt_secret: "change-me-jwt-secret"
+  jwt_expires_minutes: 43200
+  data_path: "data/chat.db"
 
   # Comma-separated origins are also supported through CORS_ORIGINS env var.
   cors_origins:
@@ -23,5 +29,6 @@ providers:
   #   base_url: "https://api.example.com/v1"
   #   api_key: "your-provider-key"
   #   models:
+  #     - "gpt-5.5"
   #     - "provider-chat-model"
-  #   default_model: "provider-chat-model"
+  #   default_model: "gpt-5.5"
