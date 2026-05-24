@@ -39,18 +39,11 @@ providers:
 
 ```bash
 cd backend
-docker compose up --build
-```
-
-如果你的机器没有安装 Docker Compose，也可以直接运行：
-
-```bash
-cd backend
-docker build -t chat-backend .
+docker build -t aichat .
 docker run --rm -p 8000:8000 \
   -e CONFIG_PATH=/app/config.yaml \
   -v "$PWD/config.yaml:/app/config.yaml:ro" \
-  chat-backend
+  aichat
 ```
 
 默认后端地址：
