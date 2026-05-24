@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ChatGPT API Chat</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <aside class="sidebar">
+        <div class="sidebar-top">
+          <button class="new-chat" id="newChatButton" type="button">
+            <span>+</span>
+            新对话
+          </button>
+          <button class="icon-button mobile-close" id="closeSidebarButton" type="button" aria-label="关闭侧边栏">×</button>
+        </div>
+        <div class="session-list" id="sessionList"></div>
+        <div class="sidebar-bottom">
+          <button class="account-button" id="accountButton" type="button">
+            <span class="avatar">U</span>
+            <span>
+              <strong>API Chat</strong>
+              <small id="connectionLabel">未连接</small>
+            </span>
+          </button>
+        </div>
+      </aside>
+
+      <section class="chat-panel">
+        <header class="topbar">
+          <button class="icon-button menu-button" id="openSidebarButton" type="button" aria-label="打开侧边栏">☰</button>
+          <div class="model-selectors">
+            <select id="providerSelect" aria-label="选择 API"></select>
+            <select id="modelSelect" aria-label="选择模型"></select>
+          </div>
+          <button class="text-button" id="logoutButton" type="button">退出</button>
+        </header>
+
+        <div class="messages" id="messages"></div>
+
+        <form class="composer" id="composer">
+          <div class="composer-box">
+            <textarea id="promptInput" rows="1" placeholder="给 ChatGPT 发送消息" autocomplete="off"></textarea>
+            <button class="send-button" id="sendButton" type="submit" aria-label="发送">
+              <span>↑</span>
+            </button>
+          </div>
+        </form>
+      </section>
+    </main>
+
+    <div class="login-overlay" id="loginOverlay">
+      <form class="login-card" id="loginForm">
+        <h1>ChatGPT API Chat</h1>
+        <label>
+          <span>后端地址</span>
+          <input id="backendUrlInput" type="url" placeholder="http://localhost:8000" required />
+        </label>
+        <label>
+          <span>访问密钥</span>
+          <input id="accessKeyInput" type="password" placeholder="输入后端访问密钥" required />
+        </label>
+        <button type="submit">连接</button>
+        <p id="loginError" class="login-error"></p>
+      </form>
+    </div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
+

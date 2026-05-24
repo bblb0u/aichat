@@ -1,0 +1,27 @@
+server:
+  # Frontend login keys. These protect your backend proxy endpoint.
+  access_keys:
+    - "change-me-login-key"
+
+  # Comma-separated origins are also supported through CORS_ORIGINS env var.
+  cors_origins:
+    - "*"
+
+providers:
+  - id: "openai"
+    name: "OpenAI"
+    base_url: "https://api.openai.com/v1"
+    api_key: "sk-your-openai-api-key"
+    models:
+      - "gpt-5.5"
+      - "gpt-5.4-mini"
+    default_model: "gpt-5.5"
+
+  # Add more OpenAI-compatible APIs here.
+  # - id: "compatible"
+  #   name: "Compatible API"
+  #   base_url: "https://api.example.com/v1"
+  #   api_key: "your-provider-key"
+  #   models:
+  #     - "provider-chat-model"
+  #   default_model: "provider-chat-model"
