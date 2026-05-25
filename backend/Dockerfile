@@ -2,7 +2,7 @@ FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    CONFIG_PATH=/app/config.yaml
+    PORT=8000
 
 WORKDIR /app
 
@@ -14,5 +14,4 @@ COPY config.example.yaml ./config.yaml
 
 EXPOSE 8000
 
-CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
-
+CMD ["sh", "-c", "exec uvicorn src.main:app --host 0.0.0.0 --port \"${PORT:-8000}\""]

@@ -96,11 +96,12 @@ providers:
 ```bash
 cd backend
 mkdir -p data
+PORT=8000
 
 docker run -d \
   --name aichat-backend \
-  -p 8000:8000 \
-  -e CONFIG_PATH=/app/config.yaml \
+  -e PORT="$PORT" \
+  -p "$PORT:$PORT" \
   -v "$PWD/config.yaml:/app/config.yaml:ro" \
   -v "$PWD/data:/app/data" \
   your-dockerhub-username/aichat:latest
@@ -112,10 +113,12 @@ docker run -d \
 http://localhost:8000
 ```
 
+如果要改端口，把命令里的 `PORT=8000` 改成需要的端口即可。
+
 检查后端是否正常：
 
 ```bash
-curl http://localhost:8000/health
+curl "http://localhost:${PORT:-8000}/health"
 ```
 
 返回下面内容表示后端已启动：
@@ -182,6 +185,7 @@ JWT_SECRET             JWT 签名密钥
 JWT_EXPIRES_MINUTES    JWT 有效期分钟数
 DATA_PATH              SQLite 数据库路径
 CONFIG_PATH            配置文件路径
+PORT                   后端监听端口，默认 8000
 ```
 
 `providers` 仍然通过 `config.yaml` 配置。
